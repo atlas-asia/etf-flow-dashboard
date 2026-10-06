@@ -1,0 +1,15 @@
+# 增量缓存（由 GitHub Actions cache 跨次运行保留，不入库）
+cache/
+__pycache__/
+*.pyc
+*.log
+etf_tracker/cloud/
+
+# 本地每次运行重新生成的中间产物，不入库
+ETF净流动_按用户四Sheet分类_2026.xlsx
+ETF净流动_按用户四Sheet分类_2026.html
+ETF净流动_按用户四Sheet分类_2026_矩阵版.xlsx
+ETF净流动_按用户四Sheet分类_2026_矩阵版.html
+宽基ETF净流动_按用户分类_2026.xlsx
+etf_catalog_classified.xlsx
+etf_catalog_classified.csv
