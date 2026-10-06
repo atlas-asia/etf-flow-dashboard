@@ -6,24 +6,33 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from data_fetcher import fetch_szse_etf_shares, get_trading_dates, CACHE_DIR
 
-# 上交所份额：用普通 requests（与深交所同通道，GitHub 海外服务器可访问）
+# 上交所份额：用 requests 直连（带 session cookie + _时间戳参数，GitHub 海外服务器可访问）
 SSE_URL = "https://query.sse.com.cn/commonQuery.do"
 SSE_HEADERS = {
-    "Referer": "https://www.sse.com.cn/",
+    "Referer": "https://www.sse.com.cn/disclosure/fund/etf/list/index.html",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
 }
+_sse_session = requests.Session()
+try:
+    # 先访问上交所首页，拿到必要 cookie（否则 commonQuery 返回空）
+    _sse_session.get("https://www.sse.com.cn/", headers={"User-Agent": SSE_HEADERS["User-Agent"]}, timeout=10)
+except Exception:
+    pass
+
 def fetch_sse_etf_shares(date_str):
     params = {
+        "sqlId": "COMMON_SSE_ZQPZ_ETFZL_XXPL_ETFGM_SEARCH_L",
+        "STAT_DATE": date_str,
         "isPagination": "true", "pageHelp.pageSize": "10000", "pageHelp.pageNo": "1",
         "pageHelp.beginPage": "1", "pageHelp.cacheSize": "1", "pageHelp.endPage": "1",
-        "sqlId": "COMMON_SSE_ZQPZ_ETFZL_XXPL_ETFGM_SEARCH_L", "STAT_DATE": date_str,
+        "_": str(int(time.time() * 1000)),
     }
     try:
-        resp = requests.get(SSE_URL, params=params, headers=SSE_HEADERS, timeout=20)
+        resp = _sse_session.get(SSE_URL, params=params, headers=SSE_HEADERS, timeout=25)
         resp.encoding = "utf-8"
         data = resp.json()
-        result = data.get("result", [])
+        result = data.get("result") or []
         if not result:
             return pd.DataFrame(columns=["基金代码", "基金简称", "基金份额", "日期"])
         df = pd.DataFrame(result).rename(columns={
@@ -32,7 +41,7 @@ def fetch_sse_etf_shares(date_str):
         df["日期"] = date_str
         return df[["基金代码", "基金简称", "基金份额", "日期"]]
     except Exception as e:
-        print(f"  SSE API error for {date_str}: {e}")
+        print(f"  SSE API error for {date_str}: {e}", flush=True)
         return pd.DataFrame(columns=["基金代码", "基金简称", "基金份额", "日期"])
 
 HERE = os.path.dirname(os.path.abspath(__file__))
