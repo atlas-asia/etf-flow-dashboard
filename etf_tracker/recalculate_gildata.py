@@ -62,7 +62,7 @@ def main():
     flow = flow_base.merge(classification[["主分类", "分类", "基金代码", "名称"]], on="基金代码", how="inner")
 
     monthly = flow.groupby(["主分类", "月份", "分类"], observed=True).agg(
-        净流动_元=("净流动(元)", "sum"), ETF数量=("基金代码", "nunique")
+        净流动_元=("净流动(元)", lambda s: s.sum(min_count=1)), ETF数量=("基金代码", "nunique")
     ).reset_index()
     monthly["净流动(亿元)"] = monthly["净流动_元"] / 1e8
 
@@ -76,19 +76,19 @@ def main():
     week = flow[flow["日期"].isin(week_dates)].copy()
     week_start = week_dates[0]
     weekly = week.groupby(["主分类", "分类"], observed=True).agg(
-        净流动_元=("净流动(元)", "sum"), ETF数量=("基金代码", "nunique")
+        净流动_元=("净流动(元)", lambda s: s.sum(min_count=1)), ETF数量=("基金代码", "nunique")
     ).reset_index()
     weekly["净流动(亿元)"] = weekly["净流动_元"] / 1e8
     weekly["统计区间"] = f"{week_start} ~ {latest_date}"
 
     etf_detail = flow.groupby(["主分类", "分类", "基金代码", "名称"], observed=True).agg(**{
-        "2026年以来净流动_元": ("净流动(元)", "sum"), "数据起始日": ("日期", "min"), "数据截止日": ("日期", "max")
+        "2026年以来净流动_元": ("净流动(元)", lambda s: s.sum(min_count=1)), "数据起始日": ("日期", "min"), "数据截止日": ("日期", "max")
     }).reset_index()
     etf_detail["2026年以来净流动(亿元)"] = etf_detail["2026年以来净流动_元"] / 1e8
 
     with pd.ExcelWriter(OUT_XLSX, engine="openpyxl") as writer:
         monthly[["主分类", "月份", "分类", "净流动(亿元)", "ETF数量"]].to_excel(writer, index=False, sheet_name="全部月度净流动")
-        daily_week = flow[flow["日期"].isin(week_dates)].groupby(["主分类", "日期", "分类"], observed=True).agg(净流动_元=("净流动(元)", "sum"), ETF数量=("基金代码", "nunique")).reset_index()
+        daily_week = flow[flow["日期"].isin(week_dates)].groupby(["主分类", "日期", "分类"], observed=True).agg(净流动_元=("净流动(元)", lambda s: s.sum(min_count=1)), ETF数量=("基金代码", "nunique")).reset_index()
         daily_week["净流动(亿元)"] = daily_week["净流动_元"] / 1e8
         daily_week.to_excel(writer, index=False, sheet_name="最新一周逐日净流动")
         weekly[["统计区间", "主分类", "分类", "净流动(亿元)", "ETF数量"]].to_excel(writer, index=False, sheet_name="全部最新一周")
