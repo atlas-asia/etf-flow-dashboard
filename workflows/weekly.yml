@@ -1,0 +1,59 @@
+name: ETF 周更自动更新
+
+on:
+  schedule:
+    # 周六 11:00（北京时间）主跑；比原来 09:00 晚 2 小时，等交易所份额数据出全
+    - cron: '0 3 * * 6'
+    # 周六 14:00（北京时间）补跑：主跑失败或数据不全时自动兜底，免去手动点 Run workflow
+    - cron: '0 6 * * 6'
+  # 允许在 Actions 页面手动点一次「Run workflow」立即运行
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# 防止主跑与补跑同时写 gh-pages
+concurrency:
+  group: etf-weekly-publish
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: 签出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 恢复增量缓存（断点续传用，跨次累积）
+        uses: actions/cache@v4
+        with:
+          path: cache
+          key: etf-cache-${{ github.run_number }}
+          restore-keys: |
+            etf-cache-
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          # 优先用仓库自带 requirements.txt；若仓库没有该文件，则回退显式安装 CI 实际需要的 5 个包
+          # （pandas/openpyxl/requests 为各脚本共用；akshare、curl_cffi 由 data_fetcher 在导入时强制依赖）
+          pip install -r requirements.txt || pip install pandas openpyxl requests akshare curl_cffi
+
+      # 数据不全时该步骤会直接失败 -> 后续发布被跳过 -> 线上保留上一次正确版本
+      - name: 运行周更（净值走东方财富，免费无密钥）
+        env:
+          NAV_SOURCE: eastmoney
+        run: python etf_tracker/weekly_update.py
+
+      - name: 部署到 GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
